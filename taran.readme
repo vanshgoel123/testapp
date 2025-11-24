@@ -1,0 +1,505 @@
+# ITML (Information-Theoretic Machine Learning) Parameters Explained
+
+## 📚 Table of Contents
+1. [Introduction to ITML](#introduction-to-itml)
+2. [Shannon Entropy](#shannon-entropy)
+3. [Mutual Information](#mutual-information)
+4. [Information Bottleneck](#information-bottleneck)
+5. [Information Gain](#information-gain)
+6. [Model Architecture Parameters](#model-architecture-parameters)
+7. [Risk Entropy Feature](#risk-entropy-feature)
+8. [How All Parameters Work Together](#how-all-parameters-work-together)
+
+---
+
+## Introduction to ITML
+
+**Information-Theoretic Machine Learning (ITML)** uses concepts from Information Theory to build better machine learning models. Information Theory is a branch of mathematics that deals with quantifying information, uncertainty, and data compression.
+
+**Key Concepts:**
+- **Entropy**: Measures uncertainty or randomness in data
+- **Mutual Information**: Measures how much information one variable shares with another
+- **Information Bottleneck**: Compresses data while preserving important information
+- **Information Gain**: Measures how much information a feature provides for classification
+
+---
+
+## Shannon Entropy
+
+### What is Shannon Entropy?
+
+**Shannon Entropy** (named after Claude Shannon) measures the **uncertainty** or **randomness** in a probability distribution. Think of it as asking: "How surprised would I be by the outcome?"
+
+### Mathematical Formula
+
+```
+H(X) = -Σ P(x) × log₂(P(x))
+```
+
+Where:
+- `H(X)` = Entropy of variable X
+- `P(x)` = Probability of outcome x
+- `log₂` = Logarithm base 2 (gives result in bits)
+
+### In Our Model
+
+**Parameter Used:**
+- **Base**: `base=2` (binary logarithm)
+- **Purpose**: Compute risk entropy for each borrower
+
+**How It Works:**
+1. We categorize borrower features into risk buckets: `risky`, `neutral`, `safe`
+2. Count how many features fall into each bucket
+3. Calculate probabilities for each bucket
+4. Apply Shannon Entropy formula
+
+**Example:**
+- If a borrower has: 2 risky, 1 neutral, 1 safe features
+- Probabilities: P(risky)=0.5, P(neutral)=0.25, P(safe)=0.25
+- Entropy = -(0.5×log₂(0.5) + 0.25×log₂(0.25) + 0.25×log₂(0.25))
+- Entropy ≈ 1.5 bits
+
+**Interpretation:**
+- **Low Entropy (0-1 bits)**: Predictable, consistent risk profile
+- **High Entropy (1.5-2 bits)**: Unpredictable, mixed risk signals
+- **Maximum Entropy (log₂(3) ≈ 1.585 bits)**: Completely random/unpredictable
+
+**Why It Matters:**
+Borrowers with high risk entropy are harder to predict and may be more likely to default because their risk signals are contradictory.
+
+---
+
+## Mutual Information
+
+### What is Mutual Information?
+
+**Mutual Information (MI)** measures how much information one variable provides about another. It answers: "If I know X, how much does that tell me about Y?"
+
+### Mathematical Formula
+
+```
+I(X; Y) = H(X) - H(X|Y)
+```
+
+Where:
+- `I(X; Y)` = Mutual Information between X and Y
+- `H(X)` = Entropy of X
+- `H(X|Y)` = Conditional Entropy (uncertainty of X given Y)
+
+**Alternative Formula:**
+```
+I(X; Y) = Σ Σ P(x,y) × log₂(P(x,y) / (P(x) × P(y)))
+```
+
+### In Our Model
+
+**Parameter Used:**
+- **Method**: `mutual_info_classif` from scikit-learn
+- **Purpose**: Feature selection - find which features are most informative for predicting loan default
+
+**How It Works:**
+1. Calculate MI between each feature and the target (Default: Yes/No)
+2. Rank features by MI score
+3. Select top N features with highest MI
+4. Remove low-information features
+
+**MI Score Interpretation:**
+- **MI = 0**: Feature provides no information about default
+- **MI > 0**: Feature provides information about default
+- **Higher MI**: More predictive power
+
+**Why It Matters:**
+- Reduces dimensionality (fewer features to process)
+- Removes noise and irrelevant features
+- Improves model performance and training speed
+- Focuses on features that actually predict default
+
+**Example Features with High MI:**
+- Credit Score (high MI - very predictive)
+- DTI Ratio (high MI - debt burden matters)
+- Loan Amount (moderate MI - larger loans riskier)
+
+**Example Features with Low MI:**
+- Loan ID (MI = 0 - random identifier)
+- Some categorical features with no predictive power
+
+---
+
+## Information Bottleneck
+
+### What is Information Bottleneck?
+
+The **Information Bottleneck** principle compresses data into a smaller representation while preserving information relevant to the task. It's like creating a summary that keeps only the important details.
+
+### Mathematical Concept
+
+The Information Bottleneck tries to:
+1. **Minimize**: I(X; Z) - Information about input X preserved in compressed representation Z
+2. **Maximize**: I(Z; Y) - Information about target Y preserved in Z
+
+**Goal**: Find the best compression Z that keeps predictive information but discards noise.
+
+### In Our Model
+
+**Implementation**: Autoencoder with bottleneck layer
+
+**Architecture:**
+```
+Input Features (N dimensions)
+    ↓
+Encoder (Neural Network)
+    ↓
+Bottleneck Layer (16 dimensions) ← Information Bottleneck
+    ↓
+Decoder (Neural Network)
+    ↓
+Reconstructed Features (N dimensions)
+```
+
+**Parameters:**
+- **Input Dimension**: Varies based on selected features (after Mutual Information selection)
+- **Encoding Dimension**: `16` (bottleneck size)
+- **Compression Ratio**: Input features → 16 compressed features
+
+**How It Works:**
+1. **Encoder**: Compresses input features to 16-dimensional representation
+2. **Bottleneck**: The 16-dimensional compressed space (this is the Information Bottleneck)
+3. **Decoder**: Reconstructs original features from bottleneck
+4. **Training**: Model learns to compress while preserving default prediction signal
+
+**Why 16 Dimensions?**
+- Balances compression (smaller = more compressed) with information preservation
+- Too small (e.g., 4): Loses important information
+- Too large (e.g., 64): Less compression, more noise
+- 16 dimensions: Sweet spot for this dataset
+
+**Benefits:**
+- **Dimensionality Reduction**: 16 features instead of many original features
+- **Noise Reduction**: Filters out irrelevant information
+- **Feature Learning**: Discovers hidden patterns in data
+- **Generalization**: Compressed representation often generalizes better
+
+**In Prediction Pipeline:**
+1. Preprocess input features
+2. Encode to 16-dimensional bottleneck representation
+3. Scale bottleneck features
+4. Classify using Logistic Regression on bottleneck features
+
+---
+
+## Information Gain
+
+### What is Information Gain?
+
+**Information Gain** measures how much information a feature provides for classification. It's used in decision trees to decide which feature to split on.
+
+### Mathematical Formula
+
+```
+IG(S, A) = H(S) - Σ (|Sᵥ|/|S|) × H(Sᵥ)
+```
+
+Where:
+- `IG(S, A)` = Information Gain of feature A on dataset S
+- `H(S)` = Entropy of dataset S
+- `Sᵥ` = Subset of S where feature A has value v
+- `|S|` = Size of dataset S
+
+**Interpretation:**
+- **High IG**: Feature provides lots of information for classification
+- **Low IG**: Feature provides little information
+
+### In Our Model
+
+**Usage**: Decision Tree classifier uses Information Gain to build the tree
+
+**How It Works:**
+1. Start with all data (root node)
+2. For each feature, calculate Information Gain
+3. Split on feature with highest Information Gain
+4. Repeat recursively for each subset
+5. Stop when entropy is 0 (pure nodes) or max depth reached
+
+**Example Splits:**
+- **First Split**: Credit Score (highest Information Gain)
+  - If Credit Score < 600 → High default risk
+  - If Credit Score ≥ 600 → Lower default risk
+- **Second Split**: DTI Ratio (next highest Information Gain)
+  - Within each credit score group, split by DTI
+
+**Why It Matters:**
+- Creates interpretable decision rules
+- Shows which features matter most
+- Provides explainability for stakeholders
+- Validates Mutual Information feature selection
+
+**Tree Parameters:**
+- **Criterion**: `entropy` (uses Information Gain)
+- **Max Depth**: Limited to prevent overfitting
+- **Min Samples Split**: Minimum samples needed to split a node
+
+---
+
+## Model Architecture Parameters
+
+### Autoencoder Architecture
+
+**Encoder Layers:**
+- **Input Layer**: Size = number of selected features (varies)
+- **Hidden Layer 1**: Typically 64-128 neurons
+- **Hidden Layer 2**: Typically 32-64 neurons
+- **Bottleneck Layer**: **16 neurons** (encoding_dim = 16)
+
+**Decoder Layers:**
+- **Hidden Layer 1**: Typically 32-64 neurons
+- **Hidden Layer 2**: Typically 64-128 neurons
+- **Output Layer**: Size = number of input features (reconstruction)
+
+**Activation Functions:**
+- **Hidden Layers**: ReLU (Rectified Linear Unit)
+- **Output Layer**: Sigmoid or Linear (depending on feature ranges)
+
+**Training Parameters:**
+- **Optimizer**: Adam (adaptive learning rate)
+- **Loss Function**: Mean Squared Error (MSE) or Mean Absolute Error (MAE)
+- **Epochs**: Number of training iterations (typically 50-200)
+- **Batch Size**: Number of samples per training step (typically 32-128)
+- **Learning Rate**: Step size for weight updates (typically 0.001)
+
+### Logistic Regression Classifier
+
+**Parameters:**
+- **Solver**: Algorithm to optimize weights (e.g., 'lbfgs', 'liblinear')
+- **C**: Regularization strength (inverse of regularization parameter)
+  - Higher C = less regularization = more complex model
+  - Lower C = more regularization = simpler model
+- **Max Iterations**: Maximum optimization iterations
+- **Class Weight**: Optional weighting for imbalanced classes
+
+**Input**: 16-dimensional bottleneck features (scaled)
+**Output**: Probability of default (0 to 1)
+
+### StandardScaler (Bottleneck Scaler)
+
+**Purpose**: Normalize bottleneck features before classification
+
+**Parameters:**
+- **Mean**: Average value of each feature (learned from training data)
+- **Standard Deviation**: Spread of each feature (learned from training data)
+
+**Formula:**
+```
+scaled_value = (value - mean) / std_deviation
+```
+
+**Why Scale?**
+- Ensures all features are on similar scales
+- Prevents features with large values from dominating
+- Improves Logistic Regression performance
+
+---
+
+## Risk Entropy Feature
+
+### What is Risk Entropy?
+
+**Risk Entropy** is a custom feature we compute for each borrower using Shannon Entropy. It quantifies the **consistency** or **contradiction** in a borrower's risk profile.
+
+### How It's Computed
+
+**Step 1: Categorize Features into Risk Buckets**
+
+1. **Credit Score**:
+   - < 580 → `risky`
+   - 580-670 → `neutral`
+   - > 670 → `safe`
+
+2. **DTI Ratio** (Debt-to-Income):
+   - > 0.45 → `risky`
+   - 0.25-0.45 → `neutral`
+   - < 0.25 → `safe`
+
+3. **Months Employed**:
+   - < 12 → `risky`
+   - 12-60 → `neutral`
+   - > 60 → `safe`
+
+4. **Collateral Proxy** (HasMortgage or HasCoSigner):
+   - Yes → `safe`
+   - No → `neutral`
+
+**Step 2: Count Bucket Frequencies**
+
+Example borrower:
+- Credit Score: 650 → `neutral`
+- DTI: 0.50 → `risky`
+- Months Employed: 8 → `risky`
+- Has Mortgage: Yes → `safe`
+
+Buckets: [neutral, risky, risky, safe]
+Counts: risky=2, neutral=1, safe=1
+
+**Step 3: Calculate Probabilities**
+
+- P(risky) = 2/4 = 0.5
+- P(neutral) = 1/4 = 0.25
+- P(safe) = 1/4 = 0.25
+
+**Step 4: Compute Shannon Entropy**
+
+```
+H = -(0.5×log₂(0.5) + 0.25×log₂(0.25) + 0.25×log₂(0.25))
+H = -(0.5×(-1) + 0.25×(-2) + 0.25×(-2))
+H = -(-0.5 - 0.5 - 0.5)
+H = 1.5 bits
+```
+
+### Interpretation
+
+**Low Risk Entropy (0-0.8 bits):**
+- All features point in same direction (all risky or all safe)
+- Consistent risk profile
+- Easier to predict
+
+**Medium Risk Entropy (0.8-1.3 bits):**
+- Mixed signals
+- Some features risky, some safe
+- Moderate uncertainty
+
+**High Risk Entropy (1.3-1.585 bits):**
+- Contradictory signals
+- Features strongly disagree on risk
+- High uncertainty, harder to predict
+- **May indicate higher default risk** (unpredictable borrowers)
+
+### Why This Feature Matters
+
+**Research Finding**: Borrowers who default often have **higher risk entropy** than non-defaulters. This makes sense because:
+- Contradictory signals indicate unstable financial situation
+- Mixed risk profile suggests uncertainty
+- Unpredictable borrowers are riskier
+
+**In the Model:**
+- Risk Entropy is added as an additional feature
+- Helps the model identify borrowers with contradictory risk signals
+- Improves prediction accuracy
+
+---
+
+## How All Parameters Work Together
+
+### Complete Prediction Pipeline
+
+```
+1. INPUT: Raw borrower features (Age, Income, Credit Score, etc.)
+   ↓
+2. FEATURE ENGINEERING: Compute Risk Entropy using Shannon Entropy
+   ↓
+3. FEATURE SELECTION: Use Mutual Information to select top features
+   ↓
+4. PREPROCESSING: Impute missing values, encode categories, scale features
+   ↓
+5. INFORMATION BOTTLENECK: Autoencoder compresses features to 16 dimensions
+   ↓
+6. SCALING: StandardScaler normalizes bottleneck features
+   ↓
+7. CLASSIFICATION: Logistic Regression predicts default probability
+   ↓
+8. OUTPUT: Prediction (0 or 1) + Probability (0 to 1) + Risk Level
+```
+
+### Information Flow
+
+**Information Theory Concepts Applied:**
+
+1. **Mutual Information** → Selects informative features
+   - Reduces feature space
+   - Removes noise
+
+2. **Shannon Entropy** → Computes Risk Entropy feature
+   - Quantifies borrower uncertainty
+   - Identifies contradictory risk signals
+
+3. **Information Bottleneck** → Compresses to 16 dimensions
+   - Preserves predictive information
+   - Removes redundant information
+   - Learns compact representation
+
+4. **Information Gain** → Decision tree interpretability
+   - Shows which features matter most
+   - Provides explainable rules
+
+### Why This Approach Works
+
+**Advantages:**
+1. **Dimensionality Reduction**: Fewer features → faster training, less overfitting
+2. **Noise Reduction**: Filters out irrelevant information
+3. **Feature Learning**: Discovers hidden patterns
+4. **Interpretability**: Risk Entropy and Information Gain provide explanations
+5. **Performance**: Achieves ROC AUC of 0.7488 and Accuracy of 0.8845
+
+**Trade-offs:**
+- **Compression**: Some information is lost in bottleneck (but predictive info is preserved)
+- **Complexity**: More steps than simple logistic regression (but better performance)
+- **Interpretability**: Bottleneck features are abstract (but Risk Entropy provides interpretability)
+
+---
+
+## Summary of Key Parameters
+
+| Parameter | Value/Type | Purpose |
+|-----------|-----------|---------|
+| **Entropy Base** | `base=2` | Binary logarithm for Shannon Entropy |
+| **Encoding Dimension** | `16` | Bottleneck layer size (compression) |
+| **Mutual Information** | `mutual_info_classif` | Feature selection method |
+| **Risk Buckets** | `risky`, `neutral`, `safe` | Categories for Risk Entropy |
+| **Scaler** | `StandardScaler` | Normalize bottleneck features |
+| **Classifier** | `LogisticRegression` | Final prediction model |
+| **Tree Criterion** | `entropy` | Information Gain for decision trees |
+
+---
+
+## Further Reading
+
+### Information Theory Basics
+- **Entropy**: Measures uncertainty/randomness
+- **Mutual Information**: Measures shared information between variables
+- **Information Bottleneck**: Optimal compression principle
+- **Information Gain**: Measures feature importance for classification
+
+### Applications in ML
+- **Feature Selection**: Mutual Information
+- **Dimensionality Reduction**: Information Bottleneck (Autoencoders)
+- **Uncertainty Quantification**: Entropy
+- **Interpretability**: Information Gain (Decision Trees)
+
+### Key Papers
+- Shannon, C. E. (1948). "A Mathematical Theory of Communication"
+- Tishby, N., et al. (2000). "The Information Bottleneck Method"
+- Cover, T. M., & Thomas, J. A. (2006). "Elements of Information Theory"
+
+---
+
+## Questions & Answers
+
+**Q: Why use base=2 for entropy?**
+A: Base 2 gives entropy in "bits", which is intuitive and standard in information theory. It answers "how many yes/no questions do I need to identify the outcome?"
+
+**Q: Why compress to 16 dimensions?**
+A: 16 dimensions balances compression (removes noise) with information preservation (keeps predictive signal). Too small loses information, too large keeps noise.
+
+**Q: What if Risk Entropy is 0?**
+A: Risk Entropy = 0 means all features are in the same risk bucket (all risky or all safe). This indicates a very consistent, predictable risk profile.
+
+**Q: Why not use all features?**
+A: Mutual Information shows that many features provide little information about default. Removing low-MI features reduces noise and improves model performance.
+
+**Q: How does Information Bottleneck differ from PCA?**
+A: PCA finds linear combinations that preserve variance. Information Bottleneck (autoencoder) finds non-linear combinations that preserve predictive information about the target.
+
+---
+
+**End of Document**
+
+*This README explains all Information-Theoretic Machine Learning parameters used in the Loan Default Prediction model. For technical implementation details, see the Jupyter notebook `ITML_Loan_Default.ipynb`.*
+
