@@ -1,13 +1,10 @@
-"""
-Helper script to copy model files from parent saved_models/ to Backend/saved_models/
-Run this if you've generated models in the parent directory.
-"""
+"""Helper script to copy model files from ../Model to Backend/Model."""
 import shutil
 from pathlib import Path
 
 def copy_models():
-    source_dir = Path("../saved_models")
-    dest_dir = Path("saved_models")
+    source_dir = Path("../Model")
+    dest_dir = Path("Model")
     
     # Create destination directory
     dest_dir.mkdir(exist_ok=True)
