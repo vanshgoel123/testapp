@@ -63,6 +63,39 @@ classifier = None
 metadata = None
 
 
+def _ensure_simple_imputer_compat(estimator, visited=None):
+    """Patch old pickled sklearn imputers missing private attrs in newer sklearn."""
+    if visited is None:
+        visited = set()
+
+    obj_id = id(estimator)
+    if obj_id in visited:
+        return
+    visited.add(obj_id)
+
+    if isinstance(estimator, SimpleImputer) and not hasattr(estimator, "_fill_dtype"):
+        stats = getattr(estimator, "statistics_", None)
+        estimator._fill_dtype = np.asarray(stats).dtype if stats is not None else np.dtype("O")
+
+    # Handle common sklearn composite estimators
+    if hasattr(estimator, "steps"):
+        for _, step in estimator.steps:
+            _ensure_simple_imputer_compat(step, visited)
+
+    if hasattr(estimator, "named_steps"):
+        for step in estimator.named_steps.values():
+            _ensure_simple_imputer_compat(step, visited)
+
+    if hasattr(estimator, "transformers_"):
+        for _, transformer, _ in estimator.transformers_:
+            if transformer not in ("drop", "passthrough"):
+                _ensure_simple_imputer_compat(transformer, visited)
+
+    if hasattr(estimator, "transformer_list"):
+        for _, transformer in estimator.transformer_list:
+            _ensure_simple_imputer_compat(transformer, visited)
+
+
 def load_models():
     """Load all model components"""
     global encoder, preprocessor, scaler_z, classifier, metadata
@@ -78,6 +111,7 @@ def load_models():
         if not preprocessor_path.exists():
             raise FileNotFoundError(f"Preprocessor not found at {preprocessor_path}")
         preprocessor = joblib.load(str(preprocessor_path))
+        _ensure_simple_imputer_compat(preprocessor)
     
     if scaler_z is None:
         scaler_path = MODEL_DIR / "bottleneck_scaler.joblib"
