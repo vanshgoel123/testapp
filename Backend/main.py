@@ -42,9 +42,20 @@ app.add_middleware(
 # Model files are in the Model folder (parent directory)
 # Resolve to absolute path to avoid issues when running from different directories
 BACKEND_DIR = Path(__file__).parent.resolve()
-MODEL_DIR = (BACKEND_DIR.parent / "Model").resolve()
-if not MODEL_DIR.exists():
-    MODEL_DIR = (BACKEND_DIR / "Model").resolve()
+
+def _select_model_dir() -> Path:
+    candidates = [
+        (BACKEND_DIR / "Model").resolve(),
+        (BACKEND_DIR.parent / "Model").resolve(),
+    ]
+    for path in candidates:
+        if (path / "encoder.h5").exists() and (path / "classifier.joblib").exists():
+            return path
+    # Fallback for startup diagnostics when files are missing
+    return candidates[0]
+
+
+MODEL_DIR = _select_model_dir()
 encoder = None
 preprocessor = None
 scaler_z = None
