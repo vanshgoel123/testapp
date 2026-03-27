@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import axios from 'axios'
 import '../index.css'
 
-const API_URL = 'http://localhost:8000'
+const API_URL = `${window.location.protocol}//${window.location.hostname}:8000`
 
 function Predict() {
   const [formData, setFormData] = useState({

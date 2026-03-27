@@ -43,6 +43,8 @@ app.add_middleware(
 # Resolve to absolute path to avoid issues when running from different directories
 BACKEND_DIR = Path(__file__).parent.resolve()
 MODEL_DIR = (BACKEND_DIR.parent / "Model").resolve()
+if not MODEL_DIR.exists():
+    MODEL_DIR = (BACKEND_DIR / "Model").resolve()
 encoder = None
 preprocessor = None
 scaler_z = None
